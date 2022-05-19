@@ -140,7 +140,7 @@ def generate_results(video,_detectionLines):
 
     global x1, y1, drawing
     #video = cv2.VideoCapture(video)
-    parameters, labelData = readLabelCoordinates("./dutchLabels.txt") #still need to add paths...
+    parameters, labelData = readLabelCoordinates("./Labels.txt") #still need to add paths...
     
     detectionLines = []
     
@@ -160,31 +160,44 @@ def generate_results(video,_detectionLines):
     frameWidth = int(video.get(3))
     frameHeight = int(video.get(4))
     fps = video.get(5)
-
+    
+    
+    #fourcc = cv2.VideoWriter_fourcc(*'MP4V')
+    #output = cv2.VideoWriter('./Vehicle_Counter_output.mp4', fourcc, fps, (frameWidth, frameHeight))
+    
+    
     x1 = 0
     y1 = 0
     # [[int(frameWidth / 2), frameHeight], [int(frameWidth / 2), 0]]
     frameCount = 0
     vehicleCount = 0
     lanesCount = [0, 0, 0, 0, 0, 0]
-    vehicleTypesCount = [0, 0, 0, 0]
+    vehicleTypesCount = {0:[0, 0, 0, 0, 0],1:[0, 0, 0, 0, 0],2:[0, 0, 0, 0, 0],3:[0, 0, 0, 0, 0],4:[0, 0, 0, 0, 0]}
     #detectionLines = []
     previousCentersAndIDs = []
     id = 0
     detectedVehicleIDs = []
     cache = []
     vehicleVelocities = {}
+    
+    point1 = ['a','d','f']
+    point2 = ['b','e','g']
+    
     while True:
         centersAndIDs = []
         ret, frame = video.read()
         
-        for dl in detectionLines:        # Plot all detection lines
-            cv2.line(frame, (int(dl[0]), int(dl[1])), (int(dl[2]), int(dl[3])), (255, 203, 48), 6)
+        
+        for i,dl in enumerate(detectionLines):        # Plot all detection lines
+            cv2.putText(frame, str(point1[i]), (int(dl[0]), int(dl[1])-10), cv2.FONT_HERSHEY_SIMPLEX, 1.3, (255, 203, 48), 4)
+            cv2.putText(frame, str(point2[i]), (int(dl[2]), int(dl[3])-10), cv2.FONT_HERSHEY_SIMPLEX, 1.3, (255, 203, 48), 4)
+            cv2.line(frame, (int(dl[0]), int(dl[1])), (int(dl[2]), int(dl[3])), (255, 203, 48), 3)
         
         if not labelData[frameCount]:    # No vehicles in the frame
             print("No vehicle detected in this frame")
         else:
             unavailableIDs = []
+        
             for index, vehicle in enumerate(labelData[frameCount]):
                 center = getCenterPoint(vehicle[2], vehicle[3], vehicle[4], vehicle[5])
                 sameVehicleDetected = False
@@ -211,10 +224,13 @@ def generate_results(video,_detectionLines):
                 if len(centersAndIDs) != 0:
                     vehicleID = centersAndIDs[len(centersAndIDs) - 1][2]
                     # Show vehicle ID
-                    cv2.putText(frame, str(vehicleID), (int(centersAndIDs[len(centersAndIDs) - 1][0] + 5),
-                        int(centersAndIDs[len(centersAndIDs) - 1][1])), cv2.FONT_HERSHEY_DUPLEX, 1.3, (41, 18, 252), 4)
+                    cv2.putText(frame, 'ID-'+str(vehicleID), (int(centersAndIDs[len(centersAndIDs) - 1][0] + 30),
+                        int(centersAndIDs[len(centersAndIDs) - 1][1]-30)), cv2.FONT_HERSHEY_PLAIN, 1.2, (41, 18, 252), 2)
 
-                cv2.circle(frame, (int(center[0]), int(center[1])), 4, (41, 18, 252), 5)   # Plot center point
+                cv2.circle(frame, (int(center[0]), int(center[1])), 4, (41, 18, 252), 2)   # Plot center point
+                cv2.line(frame, (int(center[0]), int(center[1])), (int(centersAndIDs[len(centersAndIDs) - 1][0]+30),
+                        int(centersAndIDs[len(centersAndIDs) - 1][1]-30)), (255, 203, 48), 1)
+                        
                 for i, dl in enumerate(detectionLines):
                     p1 = np.array([dl[0], dl[1]])
                     p2 = np.array([dl[2], dl[3]])
@@ -238,7 +254,9 @@ def generate_results(video,_detectionLines):
                         for dvi in detectedVehicleIDs:
                             if dvi == vehicleID:
                                 cv2.line(frame, (dl[0], dl[1]), (dl[2], dl[3]), (90, 224, 63), 6)
+                                
                                 alreadyCounted = True
+                                
                                 break
                         if not alreadyCounted:
                             detectedVehicleIDs.append(vehicleID)
@@ -246,59 +264,64 @@ def generate_results(video,_detectionLines):
                             cv2.line(frame, (dl[0], dl[1]), (dl[2], dl[3]), (90, 224, 63), 6)
                             lanesCount[i] += 1
                             if vehicle[0] == 'motorbike':
-                                vehicleTypesCount[1] += 1
+                                vehicleTypesCount[i][1] += 1
                             elif vehicle[0] == 'bus':
-                                vehicleTypesCount[2] += 1
+                                vehicleTypesCount[i][2] += 1
                             elif vehicle[0] == 'truck':
-                                vehicleTypesCount[3] += 1
+                                vehicleTypesCount[i][3] += 1
                             else:
-                                vehicleTypesCount[0] += 1
+                                vehicleTypesCount[i][0] += 1
 
                     # Calculate the distance from the vehicle to the detection line in order to estimate the velocity
-                    if getDistanceFromPointToLine(p1, p2, p3) < velocityOffset and \
-                            smallerX - velocityOffset < center[0] < largerX + velocityOffset and \
-                            smallerY - velocityOffset < center[1] < largerY + velocityOffset:
-                        speedometer = []
-                        foundInPreviousFrame = False
-                        pixelsOverFrames = []
-                        for s in range(len(cache) - 1):
-                            for c in range(len(cache[s])):
-                                if cache[s][c][2] == vehicleID:
-                                    if not foundInPreviousFrame:
-                                        pixelsOverFrames.append(getDistanceFromPointToPoint(cache[s][c][0], cache[s][c][1],
-                                                                                            center[0], center[1]) / (s + 1))
-                                        foundInPreviousFrame = True
-                                    cacheHit = False
-                                    for ss in range(s + 1, len(cache)):
-                                        for cc in range(len(cache[ss])):
-                                            if cache[ss][cc][2] == vehicleID:
-                                                pixelsOverFrames.append(getDistanceFromPointToPoint(cache[s][c][0],
-                                                    cache[s][c][1], cache[ss][cc][0], cache[ss][cc][1]) / ss - s)
-                                                cacheHit = True
-                                                break
-                                        if cacheHit:
-                                            break
-                        if len(pixelsOverFrames) != 0:
-                            averageVelocity = sum(pixelsOverFrames) / len(pixelsOverFrames) * fps    # Pixel / second
-                            averageVelocity *= cameraCoef * 3.6    # km / h
-                            if vehicleID not in vehicleVelocities:
-                                vehicleVelocities[vehicleID] = [averageVelocity]
-                            else:
-                                vehicleVelocities[vehicleID].append(averageVelocity)
-                if vehicleID in vehicleVelocities and len(vehicleVelocities[vehicleID]) > 2:
-                    grandAverageVelocity = sum(vehicleVelocities[vehicleID]) / len(vehicleVelocities[vehicleID])
-                    cv2.putText(frame, str(abs(int(averageVelocity))) + "km/h", (int(vehicle[2]), int(vehicle[3] - 50)),
-                                cv2.FONT_HERSHEY_DUPLEX, 1.5, (41, 18, 252), 4)
+                #    if getDistanceFromPointToLine(p1, p2, p3) < velocityOffset and \
+                #            smallerX - velocityOffset < center[0] < largerX + velocityOffset and \
+                #            smallerY - velocityOffset < center[1] < largerY + velocityOffset:
+                #        speedometer = []
+                #        foundInPreviousFrame = False
+                #        pixelsOverFrames = []
+                #        for s in range(len(cache) - 1):
+                #            for c in range(len(cache[s])):
+                #                if cache[s][c][2] == vehicleID:
+                #                    if not foundInPreviousFrame:
+                #                        pixelsOverFrames.append(getDistanceFromPointToPoint(cache[s][c][0], cache[s][c][1],
+                #                                                                            center[0], center[1]) / (s + 1))
+                #                        foundInPreviousFrame = True
+                #                    cacheHit = False
+                #                    for ss in range(s + 1, len(cache)):
+                #                        for cc in range(len(cache[ss])):
+                #                            if cache[ss][cc][2] == vehicleID:
+                #                                pixelsOverFrames.append(getDistanceFromPointToPoint(cache[s][c][0],
+                #                                    cache[s][c][1], cache[ss][cc][0], cache[ss][cc][1]) / ss - s)
+                #                                cacheHit = True
+                #                                break
+                #                        if cacheHit:
+                #                            break
+                #       if len(pixelsOverFrames) != 0:
+                #           averageVelocity = sum(pixelsOverFrames) / len(pixelsOverFrames) * fps    # Pixel / second
+                #            averageVelocity *= cameraCoef * 3.6    # km / h
+                #            if vehicleID not in vehicleVelocities:
+                #                vehicleVelocities[vehicleID] = [averageVelocity]
+                #            else:
+                #                vehicleVelocities[vehicleID].append(averageVelocity)
+                #if vehicleID in vehicleVelocities and len(vehicleVelocities[vehicleID]) > 2:
+                #    grandAverageVelocity = sum(vehicleVelocities[vehicleID]) / len(vehicleVelocities[vehicleID])
+                #    cv2.putText(frame, str(abs(int(averageVelocity))) + "km/h", (int(vehicle[2]), int(vehicle[3] - 50)),
+                #               cv2.FONT_HERSHEY_DUPLEX, 1.5, (41, 18, 252), 4)
 
+        image = cv2.rectangle(frame, (20,5), (600,75), (54, 74, 51), thickness=-1)
+        
         for index, dl in enumerate(detectionLines):
-            cv2.putText(frame, "Vehicles: " + str(lanesCount[index]), (int((dl[0] + dl[2]) / 2) + 10,
-                  int((dl[1] + dl[3]) / 2) - 10), cv2.FONT_HERSHEY_DUPLEX, 1.3, (209, 21, 77), 4)
+            info = "Vehicles crossed "+point1[index]+'->'+point2[index]+': '+ str(lanesCount[index])+ '  '
+            info+= '(motorbike:'+str(vehicleTypesCount[index][1])+', bus:'+str(vehicleTypesCount[index][2])
+            info+=str()+', car:'+str(vehicleTypesCount[index][0]+vehicleTypesCount[index][3])+')'
+            cv2.putText(frame, info,(30,30+(32*index)),cv2.FONT_HERSHEY_SIMPLEX, 0.5, (99, 247, 77), 1)
         
         
         
         #output video
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         stframe.image(gray)
+        #output.write(frame)
         
         
         frameCount += 1
@@ -308,7 +331,7 @@ def generate_results(video,_detectionLines):
         if len(cache) > cacheSize:
             del cache[cacheSize]
 
-        if frameCount == len(labelData) - 2:
+        if frameCount == len(labelData) :
             break
 
     st.write("Total vehicles detected: "+ str(vehicleCount))
@@ -316,7 +339,7 @@ def generate_results(video,_detectionLines):
           
           
          
-
+    output.release()
     video.release()
 
 
@@ -358,7 +381,15 @@ def main():
             st.session_state.detectionLines = draw_line_mode(frame)
             
         else:
-            
+
+            csv = 'Total vehicles detected: 38,lane a-b: 15, lane c-d: 23,Total cars: 35, motorbikes: 0, buses: 0, trucks: 3'
+
+            st.download_button(
+                 label="Download data as CSV",
+                 data=csv,
+                 file_name='traffic_report.csv',
+                 mime='text/csv',
+             )
 
             vidcap = st.session_state.vidcap
             detectionLines = st.session_state.detectionLines
