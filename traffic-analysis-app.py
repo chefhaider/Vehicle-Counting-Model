@@ -74,6 +74,7 @@ def draw_line_mode(frame):
 
 def main():
     
+    canvas_mode = True
     uploaded_video = st.sidebar.file_uploader("Background image:", type=["png", "jpg",'mp4'])
     
     if 'vidcap' not in st.session_state:
@@ -85,7 +86,7 @@ def main():
 	    
     if uploaded_video is not None: # run only when user uploads video
         button = st.button(label = 'get started', key="ta_submit")
-        if not button:
+        if not button and canvas_mode:
             
 
             vid = uploaded_video.name
@@ -101,10 +102,9 @@ def main():
             vidcap = cv2.VideoCapture(vid) # load video from disk
             st.session_state.vidcap = vidcap
             ret, frame = vidcap.read()
-            #################################### adding code for allowing the user to add lines########################################
-            
-            
+            canvas_mode = False
             st.session_state.detectionLines = draw_line_mode(frame)
+            canvas_mode = False
             
         else:
 
